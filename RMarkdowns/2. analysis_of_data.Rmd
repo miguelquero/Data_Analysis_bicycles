@@ -1,0 +1,269 @@
+---
+title: "Analysis of data"
+author: "Miguel Quero Carboneras"
+date: '2022-10-27'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Precedente y objetivos
+
+Partimos de los datos limpios y ordenados (vease **processing_of_data.Rmd**). En esta limpieza se han eliminado columnas que no eran útiles y se ha disgregado la información de algunas columnas en otras más específicas. Además se ha sintetizado la duración de los viajes en segundos.
+
+El objetivo principal del analisis es comparar el uso que hacen los miembros y los usuarios anuales de las bicicletas, en cuestion de tiempo usando la bicicleta y los días de la semana en los que se hace el uso. 
+
+## Cargar los datos y revisión previa
+
+Lo primero es cargar las librerias:
+
+```{r libraries, echo=TRUE, results='hide'}
+library(tidyverse)
+library(lubridate)
+```
+
+Lo segundo es importar el archivo *.csv* con los datos:
+
+```{r import, echo=TRUE, results='hide'}
+setwd("C:/Users/migue/OneDrive/Escritorio/GitHub/Data_analysis_bicycles/Data/1_prepared_&_processed_data")
+trips_202110_202209_clean <- read_csv("trips_202110_202209_processed.csv")
+```
+Al revisar el documento me he dado cuenta de que los días de la semana están en castellano y no se reconocen los acentos por lo que voy a ponerlos en inglés:
+
+```{r acentos, echo=TRUE}
+trips_202110_202209_clean %>% 
+  mutate(day_of_week = recode(day_of_week,
+                                "lunes" = "monday",
+                                "martes" = "tuesday",
+                              "jueves" = "thursday",
+                              "viernes" = "friday",
+                              "domingo" = "sunday")) -> trips_202110_202209_clean
+
+trips_202110_202209_clean[grepl("rcoles", 
+                                trips_202110_202209_clean$day_of_week), 
+                          "day_of_week"] <- "wednesday"
+
+trips_202110_202209_clean[grepl("bado", 
+                                trips_202110_202209_clean$day_of_week), 
+                          "day_of_week"] <- "saturday"
+```
+
+## Análisis de *ride_length* de cada tipo de usuario
+
+```{r summary ride_length, echo=TRUE}
+summary(trips_202110_202209_clean$ride_length)
+```
+
+Los datos de mediana, mínimo y maximo no son de especial relevancia para el analisis; en especial el maximo y el mínimo que parecen representar casos erroneos. Sería más relevante para un análisis más en profundidad los cuartiles o deciles. Por el momento me voy a analizar los datos a nivel de media.
+
+Una vez conocida la media general de los viajes (1244 segundos o unos 20 minutos), voy a compararlo con la media para cada tipo de usuario.
+
+```{r mean ride_length, echo=TRUE}
+aggregate(trips_202110_202209_clean$ride_length ~ 
+            trips_202110_202209_clean$member_casual, 
+          FUN = mean)
+```
+
+La media para usuarios casuales es de 32 minutos, frente a los 13 minutos de los miembros anuales. Esto supone un uso superior del 40.6%. Para poner mejor en contexto este resultado voy a ver número de cada tipo de usuario y que porcentaje del total de usuarios representa cada uno.
+
+```{r number usuaries, echo=TRUE}
+sum(trips_202110_202209_clean$member_casual == "member") * 100 / nrow(trips_202110_202209_clean)
+sum(trips_202110_202209_clean$member_casual == "casual") * 100 / nrow(trips_202110_202209_clean)
+```
+
+Los usuarios casuales son el 41.1% del total, lo cual confirma la importancia de este análisis para conseguir que estas personas adquieran la membresia anual.
+
+## Análisis del *ride_length* en cada día de la semana
+
+Voy a ver en que día de la semana se hace un mayor uso de las bicicletas por parte de cada tipo de usuario.
+
+```{r ride_length per day, echo=TRUE}
+aggregate(trips_202110_202209_clean$ride_length ~ trips_202110_202209_clean$member_casual + 
+            trips_202110_202209_clean$day_of_week, FUN = mean)
+```
+
+## Análisis del número de viajes de cada usuario por semana
+
+Ahora voy a sacar que días de la semana hay mayor número de viajes por tipo de usuario.
+
+```{r number trips per day, echo=TRUE}
+trips_202110_202209_clean %>% 
+  mutate(day_week = wday(started_at, label = TRUE)) %>%
+  group_by(member_casual, day_week) %>%
+  summarise(number_of_rides = n()) %>%
+  arrange(member_casual, day_week) %>%
+  mutate(day_week = recode(day_week,
+                           "do\\." = "Sunday",
+                           "lu\\." = "Monday",
+                           "ma\\." = "Tuesday",
+                           "mi\\." = "Wednesday",
+                           "ju\\." = "Thursday",
+                           "vi\\." = "Friday",
+                           "sá\\." = "Saturday"))
+```
+
+## Resultado conjunto
+
+Por último, voy a generar una tabla con los dos últimos resultados combinados.
+
+```{r users per day, echo=TRUE}
+trips_202110_202209_clean %>% 
+  mutate(day_week = wday(started_at, label = TRUE)) %>% 
+  group_by(member_casual, day_week) %>% 
+  summarise(number_of_rides = n(),
+            average_duration = (mean(ride_length))/60, 
+             se_duration = sd(ride_length/60)/sqrt(n())) %>% 
+  arrange(member_casual, day_week)  %>%
+  mutate(day_week = recode(day_week,
+                           "do\\." = "Sunday",
+                           "lu\\." = "Monday",
+                           "ma\\." = "Tuesday",
+                           "mi\\." = "Wednesday",
+                           "ju\\." = "Thursday",
+                           "vi\\." = "Friday",
+                           "sá\\." = "Saturday")) -> summary
+
+```
+
+## Visualizaciones
+
+Este primer análisis me ha servido para hacerme una idea del panorama general. Para que sea más claro el resultado voy a mostrarlo con visualizaciones de lo más genérico hasta lo más específico.
+
+### Proporción de cada tipo de usuarios
+
+En el siguiente pie chard se observa que proporción de los usurios totales de este año son casuales y cuales miembros.
+
+```{r pie-chard, echo=FALSE}
+trips_202110_202209_clean %>% 
+  group_by(member_casual) %>%
+  summarise(percentage_usuaries = round(n() * 100 / nrow(trips_202110_202209_clean), 1)) ->
+  percentages
+
+color_bar <- c(casual = "#8DA0CB", member = "#FC8D62")
+
+pie(percentages$percentage_usuaries, 
+    labels = paste(percentages$member_casual, " ", "(", percentages$percentage_usuaries, "%", ")"), 
+    border = "white", col = color_bar, 
+    cex=1, font.lab = 2, radius = 1)
+```
+
+### Número de viajes por mes y tipo de usuario
+
+Con el siguiente gráfico nos podemos hacer una idea de la existencia o no de estacionalidad a lo largo del año entre cada tipo de usuario.
+
+```{r trips_mounth, echo=FALSE}
+color_bar <- c(casual = "#8DA0CB", member = "#FC8D62")
+
+positions <- c("January", "February", "March", "April",
+               "May", "June", "July", "August",
+               "September", "October", "November", "December")
+
+trips_202110_202209_clean %>% 
+  mutate(month = format(started_at, "%m")) %>% 
+  group_by(member_casual, month) %>% 
+  summarise(number_of_rides = n()
+            ,average_duration = (mean(ride_length))/60) %>% 
+  arrange(member_casual, month)  %>%
+  mutate(month = recode(month,
+                           "01" = "January",
+                           "02" = "February",
+                           "03" = "March",
+                           "04" = "April",
+                           "05" = "May",
+                           "06" = "June",
+                           "07" = "July",
+                           "08" = "August",
+                           "09" = "September",
+                           "10" = "October",
+                           "11" = "November",
+                           "12" = "December")) %>%
+  ggplot(aes(x = month, y = number_of_rides, fill = member_casual)) +
+  geom_bar(position = "dodge", stat = "identity",
+           color="black", alpha=0.5, width=0.8) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1.05, hjust = 1, 
+                                   face = "bold", size = 12), 
+        panel.border = element_blank(), panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        axis.line = element_line(colour = "black", size = 1),
+        legend.position = c(0.9, 0.96), 
+        legend.title = element_text(color = "white"), 
+        legend.text = element_text(size = 12, face = "bold"), 
+        axis.title.y = element_text(size = 15, face = "bold"), 
+        axis.text.y = element_text(size = 12, face = "bold")) +
+  scale_fill_manual(values = color_bar) +
+  xlab(NULL) + ylab("Total number of rides") + 
+  scale_x_discrete(limits = positions) +
+  scale_y_continuous(limits = c(0, 4.5e+05), expand = c(0,0))
+```
+
+### Número de viajes por día de la semana de cada tipo de usurio
+
+Este es el primero de los resultados más específicos a nivel de día de la semana.
+
+```{r bar chard number, echo=FALSE}
+color_bar <- c(casual = "#8DA0CB", member = "#FC8D62")
+
+positions <- c("Sunday", "Monday", "Tuesday", "Wednesday", 
+               "Thursday", "Friday", "Saturday")
+
+summary %>%
+  ggplot(aes(x = day_week, y = number_of_rides, fill = member_casual)) +
+  geom_bar(position = "dodge", stat = "identity",
+           color="black", alpha=0.5, width=0.8) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1.05, hjust = 1, 
+                                   face = "bold", size = 12), 
+        panel.border = element_blank(), panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        axis.line = element_line(colour = "black", size = 1),
+        legend.position = c(0.9, 0.96), 
+        legend.title = element_text(color = "white"), 
+        legend.text = element_text(size = 12, face = "bold"), 
+        axis.title.y = element_text(size = 15, face = "bold"), 
+        axis.text.y = element_text(size = 12, face = "bold")) +
+  scale_fill_manual(values = color_bar) +
+  xlab(NULL) + ylab("Total number of rides") + 
+  scale_x_discrete(limits = positions) +
+  scale_y_continuous(limits = c(0, 5.5e+05), expand = c(0,0))
+
+```
+
+
+### Longitud de los viajes por día de la semana y tipo de usurio
+
+Este último gráfico nos ayuda a comparar la duración de los viajes de forma más espcífica.
+
+```{r bar chard lenght, echo=FALSE}
+color_bar <- c(casual = "#8DA0CB", member = "#FC8D62")
+
+positions <- c("Sunday", "Monday", "Tuesday", "Wednesday", 
+               "Thursday", "Friday", "Saturday")
+
+summary %>%
+  ggplot(aes(x = day_week, y = average_duration, fill = member_casual)) +
+  geom_bar(position = "dodge", stat = "identity",
+           color="black", alpha=0.5, width=0.8) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1.05, hjust = 1, 
+                                   face = "bold", size = 12), 
+        panel.border = element_blank(), panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        axis.line = element_line(colour = "black", size = 1),
+        legend.position = c(0.9, 0.96), 
+        legend.title = element_text(color = "white"), 
+        legend.text = element_text(size = 12, face = "bold"), 
+        axis.title.y = element_text(size = 15, face = "bold"), 
+        axis.text.y = element_text(size = 12, face = "bold")) +
+  scale_fill_manual(values = color_bar) +
+  xlab(NULL) + ylab("Average duration (min)") + 
+  scale_x_discrete(limits = positions) +
+  scale_y_continuous(limits = c(0, 45), expand = c(0,0)) +
+  geom_errorbar(aes(x=day_week, y=average_duration, fill=member_casual,
+                       ymin=average_duration-se_duration, 
+                       ymax=average_duration+se_duration), 
+                   colour="black", alpha=0.9, size=0.8, 
+                width=0.4, position=position_dodge(.75))
+```

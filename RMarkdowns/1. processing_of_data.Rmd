@@ -1,0 +1,188 @@
+---
+title: "Processing of data"
+author: "Miguel Quero Carboneras"
+date: '2022-10-25'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Procesado previo al análisis
+
+## Librerias necesarias
+
+Para este procesado previo se usará tidyverse para leer los ficheros y poder crear nuevas columnas con los datos existentes. Tambíen necesitaremos un paquete para trabajar con los datos tipo fecha y hora.
+
+```{r libraries, echo=TRUE, results='hide'}
+library(tidyverse)
+library(lubridate)
+```
+
+## Preparación de los datos
+
+Los ficheros originales se encuentran alojados en un subcarpeta llamada *original_data*. Se van a guardar en variables llamadas siguiendo la siguiente estructura: **original_yyyy_mm**.
+
+```{r read_files, echo=FALSE}
+setwd("C:/Users/migue/OneDrive/Escritorio/GitHub/Data_analysis_bicycles/Data/0_original_data")
+
+original_2021_10 <- read_csv("202110_tripdata.csv")
+original_2021_11 <- read_csv("202111_tripdata.csv")
+original_2021_12 <- read_csv("202112_tripdata.csv")
+original_2022_01 <- read_csv("202201_tripdata.csv")
+original_2022_02 <- read_csv("202202_tripdata.csv")
+original_2022_03 <- read_csv("202203_tripdata.csv")
+original_2022_04 <- read_csv("202204_tripdata.csv")
+original_2022_05 <- read_csv("202205_tripdata.csv")
+original_2022_06 <- read_csv("202206_tripdata.csv")
+original_2022_07 <- read_csv("202207_tripdata.csv")
+original_2022_08 <- read_csv("202208_tripdata.csv")
+original_2022_09 <- read_csv("202209_tripdata.csv")
+```
+
+Para trabajar de forma más cómoda pretendo juntar todos los ficheros en un único fichero que abarque todos los datos de todo el año natural, pero primero hay que comprobar que todos los ficheros cumplen con la misma estructura y todas las columnas se llaman igual. Para ello uso el comando `col_names`. Además de revisar las columnas entro en cada archivo para echar un vistazo general y comprobar cual es el formato de los datso en cada columna.
+
+```{r data integrity, echo=FALSE, results='hold'}
+colnames(original_2021_10)
+colnames(original_2021_11)
+colnames(original_2021_12)
+colnames(original_2022_01)
+colnames(original_2022_02)
+colnames(original_2022_03)
+colnames(original_2022_04)
+colnames(original_2022_05)
+colnames(original_2022_06)
+colnames(original_2022_07)
+colnames(original_2022_08)
+colnames(original_2022_09)
+```
+
+Todos los archivos comparten las mismas columnas por lo que no es necesario cambiar el nombre de ninguna columna columna.El siguiente paso consiste en comprobar que los datos se ajustan al tipo de dato de cada columna y que no existen incongruencias. Para ello uso la fórmula `str()`.
+
+```{r check incongruities, echo=FALSE, results='hold'}
+str(original_2021_10)
+str(original_2021_11)
+str(original_2021_12)
+str(original_2022_01)
+str(original_2022_02)
+str(original_2022_03)
+str(original_2022_04)
+str(original_2022_05)
+str(original_2022_06)
+str(original_2022_07)
+str(original_2022_08)
+str(original_2022_09)
+```
+En este caso todas las columnas de todos los archifos comparten los mismos formatos y estos son adecuados para todas las columnas.
+
+Podemos pasar al siguiente paso del preparado de los datos que consiste en obtener un único archivo que englobe todos los datos del año natural.
+
+```{r join data, echo=TRUE}
+trips_202110_202209 <- bind_rows(original_2021_10,
+                                 original_2021_11,
+                                 original_2021_12,
+                                 original_2022_01,
+                                 original_2022_02,
+                                 original_2022_03,
+                                 original_2022_04,
+                                 original_2022_05,
+                                 original_2022_06,
+                                 original_2022_07,
+                                 original_2022_08,
+                                 original_2022_09)
+```
+
+## Procesado y limpieza de datos
+
+Lo primero va a ser eliminar las filas correspondientes al mantenimiento de las bicicletas. Estas filas están identificadas en la columna *start_station_name* con el valor "HQ QR".
+
+```{r row clean, echo=TRUE, results='hide'}
+trips_202110_202209 %>% 
+  filter(start_station_name != "HQ QR") -> trips_202110_202209
+```
+
+Antes de nada voy a eliminar columnas que no me van a ser de utilidad en un primer momento para ligerar el archivo creado del año natural, el cuál contiene casi 6 millones de observaciones. Las columnas correspondientes a latitud y longitud no me van a ser necesarias. Además, en el caso de las columnas correspondientes a los nombres y a los ids de las estaciones, en muchos casos estos campos están vacios (*NA*) por lo que también van a ser eliminados.
+
+```{r columns clean, echo=TRUE, results='hide'}
+trips_202110_202209 %>% select(-c(start_station_name, 
+                                  start_station_id, 
+                                  end_station_name,
+                                  end_station_id,
+                                  start_lat,
+                                  end_lat,
+                                  start_lng,
+                                  end_lng)) -> trips_202110_202209
+```
+
+El resultado final se pude consultar por medio de las funciones `head()` y `summary()`:
+
+```{r result, echo=FALSE, results='hold'}
+summary(trips_202110_202209)
+head(trips_202110_202209)
+```
+
+En el caso de la fecha y la hora está todo en la misma columna, lo cual dificulta el análisis de los datos a más detalle por ese motivo se separa esta columna en otras, para poder tomar como variable los meses y días por separado. Para esto hay que tener en cuenta qeu el formato de fecha es `yyyy-mm-dd hh:mm:ss` y que el día es siempre igual al *started_at* y al *ended_at*, lo que cambia es la hora.
+
+Este comado separa la fecha en una nueva columna:
+
+```{r dates, echo=TRUE, results='hide'}
+trips_202110_202209$date <- as.Date(trips_202110_202209$started_at)
+
+```
+Los cuatro siguientes se encargan de generar a partir de la nueva columna *date*, una columna para el día, otra para el mes, para el año y por último para el día de la semana. 
+```{r dates_2, echo=TRUE, results='hide'}
+trips_202110_202209$month <- format(as.Date(trips_202110_202209$date), "%m")
+trips_202110_202209$day <- format(as.Date(trips_202110_202209$date), "%d")
+trips_202110_202209$year <- format(as.Date(trips_202110_202209$date), "%Y")
+trips_202110_202209$day_of_week <- format(as.Date(trips_202110_202209$date), "%A")
+```
+
+Por último hay que generar una última columna relativa al tiempo. El dato que interesa no es la hora a la que se usa la bicicleta, es el tiempo que se hace uso de ella, por lo que hay que generar una columna con este dato.
+
+```{r ride_length, echo=TRUE, results='hide'}
+trips_202110_202209$ride_length <- difftime(trips_202110_202209$ended_at,
+                                            trips_202110_202209$started_at)
+```
+
+El siguiente paso es ordenar las columnas.
+
+```{r sort columns, echo=TRUE, results='hide'}
+trips_202110_202209 %>% 
+  select(1, 2, 9, 7, 8, 10, 6, 3, 4, 11, 5) ->
+  trips_202110_202209
+```
+
+Hay que volver a comprobar el formato de los datos para cada columna
+
+```{r data types, echo=TRUE, results='hold'}
+str(trips_202110_202209)
+```
+
+En el caso de la columna *ride_length* hay que pasarla a número y quitar las unidades.
+
+```{r numeric, echo=TRUE, results='hide'}
+ as.numeric(as.character(trips_202110_202209$ride_length)) ->
+  trips_202110_202209$ride_length
+```
+
+Para comprobar que la nueva columna ha sido bien calculada y que no hay filas en donde haya errores, hay que comprobar que todas las restas dan mayor de 0. Esto es debido que un resultado igual o menor de 0 no puede contar como uso.
+
+```{r check ride_length, echo=TRUE, results='hold'}
+sum(trips_202110_202209$ride_length <= 0)
+```
+
+En este caso vemos que hay un total de 540 filas donde el resultado es negativo, por lo que hay que eliminarlas.
+
+```{r clean ride_length, echo=TRUE, results='hide'}
+trips_202110_202209 %>% 
+  filter(ride_length > 0) -> trips_202110_202209
+```
+
+Una vez llevadas a cabo todas las modificaciones y limpiezas hay que guardar el archivo obtenido.
+
+```{r save file, eval=FALSE, include=FALSE}
+write.csv(trips_202110_202209, file = "C:/Users/migue/OneDrive/Escritorio/GitHub/Data_analysis_bicycles/Data/prepared_&_processed_data/trips_202110_202209_processed.csv")
+```
+
+Con esto ya están listos los datos para su analisis. 
