@@ -12,7 +12,7 @@ En este caso práctico desarrollo y pongo en práctica los conocimientos adquiri
 El analísis y las visualizaciones se ha llevado a cabo con **RStudio**, haciendo uso de los paquetes de **Tidyverse**. Todo el proceso de analisis se recoge en dos RMarkdowns adjuntos en este directorio.
 
 <img src="./RMarkdowns/icons_readme/r.svg" width=100 > 
-<img src="./RMarkdowns/icons_readme/tidyverse.svg" width=100 >
+<img src="./RMarkdowns/icons_readme/tidyverse.svg" width=100 background="white">
 <img src="./RMarkdowns/icons_readme/google.svg" width=100 >
 <img src="./RMarkdowns/icons_readme/coursera.svg" width=100 >
 
